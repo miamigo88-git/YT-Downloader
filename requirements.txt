@@ -1,2 +1,5 @@
 flask==2.3.3
+flask-socketio==5.3.3
+eventlet==0.33.3
 yt-dlp==2023.10.13
+sqlalchemy==2.0.22
