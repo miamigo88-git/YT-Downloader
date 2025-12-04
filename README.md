@@ -1,5 +1,5 @@
 ```markdown
-YT-Downloader (TrueNAS SCALE) — README
+YT-Downloader (TrueNAS SCALE) — README.
 
 What this repo contains
 - A minimal Flask + Socket.IO app that uses yt-dlp to search and download YouTube videos.
