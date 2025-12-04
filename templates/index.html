@@ -1,0 +1,144 @@
+```html
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>YT Downloader (Minimal)</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 900px; margin:auto; }
+    input, select { margin: 5px 0; width: 100%; padding: 8px; box-sizing: border-box; }
+    .job { border: 1px solid #ddd; padding: 8px; margin: 6px 0; }
+    .progress { font-size: 0.9em; color: #555; }
+    #login { margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <h2>YT Downloader (Minimal)</h2>
+
+  <div id="login" style="display:none;">
+    <label>API Token:</label>
+    <input id="token_input" placeholder="Enter API token">
+    <button id="save_token">Save token</button>
+    <button id="clear_token">Clear</button>
+  </div>
+
+  <div>
+    <label>Query (title or keywords)</label>
+    <input id="query" placeholder="Doraemon">
+    <label>Language (optional)</label>
+    <input id="language" placeholder="Malay">
+    <label>Mark as series?</label>
+    <input type="checkbox" id="is_series">
+    <label>Always run (monitor for new episodes)?</label>
+    <input type="checkbox" id="always_series">
+    <label>Min length (minutes)</label>
+    <input id="min_length" type="number" min="0">
+    <label>Max length (minutes)</label>
+    <input id="max_length" type="number" min="0">
+    <label>Folder name (optional)</label>
+    <input id="folder_name" placeholder="">
+    <button id="submit">Submit request</button>
+  </div>
+
+  <h3>Jobs</h3>
+  <div id="jobs"></div>
+
+  <script src="/static/socket.io.min.js"></script>
+  <script>
+    const tokenRequired = {{ 'true' if token_required else 'false' }};
+    const LOCAL_TOKEN_KEY = 'yt_downloader_token';
+
+    function getToken() {
+      return localStorage.getItem(LOCAL_TOKEN_KEY) || '';
+    }
+    function setToken(t) { localStorage.setItem(LOCAL_TOKEN_KEY, t); }
+    function clearToken() { localStorage.removeItem(LOCAL_TOKEN_KEY); }
+
+    if (tokenRequired) {
+      document.getElementById('login').style.display = 'block';
+      const stored = getToken();
+      document.getElementById('token_input').value = stored;
+    }
+
+    document.getElementById('save_token').onclick = ()=>{
+      const t = document.getElementById('token_input').value.trim();
+      setToken(t);
+      connectSocket();
+      reloadJobs();
+    };
+    document.getElementById('clear_token').onclick = ()=>{
+      clearToken();
+      connectSocket();
+      reloadJobs();
+    };
+
+    function authHeaders() {
+      const t = getToken();
+      const headers = {};
+      if (t) headers['Authorization'] = 'Bearer ' + t;
+      return headers;
+    }
+
+    let socket = null;
+    function connectSocket() {
+      if (socket) {
+        try { socket.disconnect(); } catch(e) {}
+        socket = null;
+      }
+      const t = getToken();
+      let options = {};
+      if (t) options = { auth: { token: t } };
+      socket = io(undefined, options);
+      socket.on('connect', ()=>{ console.log('socket connected'); });
+      socket.on('job_updated', (d)=>{ console.log('job', d); reloadJobs(); });
+      socket.on('download_progress', (p)=>{ console.log('progress', p); /* TODO show progress */ });
+    }
+
+    connectSocket();
+
+    function reloadJobs() {
+      fetch('/api/jobs', { headers: authHeaders() }).then(r=>{
+        if (r.status === 401) { document.getElementById('jobs').innerText = 'Unauthorized. Provide token.'; return; }
+        return r.json();
+      }).then(renderJobs).catch(e=>{ console.log(e); });
+    }
+
+    function renderJobs(data) {
+      if (!data) return;
+      const jobsDiv = document.getElementById('jobs');
+      jobsDiv.innerHTML = '';
+      data.forEach(j=>{
+        const el = document.createElement('div');
+        el.className = 'job';
+        let title = `<strong>#${j.id} ${j.query}</strong>`;
+        title += `<div>${j.folder_name} - ${j.status}</div>`;
+        title += `<div class="progress">${j.yt_id||''}</div>`;
+        if (j.is_series) title += `<div><em>Series</em></div>`;
+        el.innerHTML = title;
+        jobsDiv.appendChild(el);
+      });
+    }
+
+    document.getElementById('submit').onclick = ()=>{
+      fetch('/api/submit', {
+        method:'POST',
+        headers: Object.assign({'Content-Type':'application/json'}, authHeaders()),
+        body: JSON.stringify({
+          query: document.getElementById('query').value,
+          language: document.getElementById('language').value,
+          is_series: document.getElementById('is_series').checked,
+          always_series: document.getElementById('always_series').checked,
+          min_length: document.getElementById('min_length').value,
+          max_length: document.getElementById('max_length').value,
+          folder_name: document.getElementById('folder_name').value
+        })
+      }).then(resp=>{
+        if (resp.status === 401) { alert('Unauthorized: set token first'); return; }
+        reloadJobs();
+      });
+    };
+
+    reloadJobs();
+  </script>
+</body>
+</html>
